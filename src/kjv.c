@@ -22,6 +22,9 @@ License: Public domain
 #include "data.h"
 #include "intset.h"
 
+/* major, minor, patch, build */
+static const char* kjv_version = "1.1.1.50";
+
 typedef struct {
     int maximum_line_length;
 
@@ -514,34 +517,38 @@ kjv_render(const kjv_ref *ref, const kjv_config *config)
 
 const char *
 usage = "usage: kjv [flags] [reference...]\n"
-    "\n"
-    "Flags:\n"
-    "  -A num  number of verses of context after matching verses\n"
-    "  -B num  number of verses of context before matching verses\n"
-    "  -C      show matching verses in context of the chapter\n"
-    "  -l      list books\n"
-    "  -h      show help\n"
-    "\n"
-    "Reference:\n"
-    "    <Book>\n"
-    "        Individual book\n"
-    "    <Book>:<Chapter>\n"
-    "        Individual chapter of a book\n"
-    "    <Book>:<Chapter>:<Verse>[,<Verse>]...\n"
-    "        Individual verse(s) of a specific chapter of a book\n"
-    "    <Book>:<Chapter>-<Chapter>\n"
-    "        Range of chapters in a book\n"
-    "    <Book>:<Chapter>:<Verse>-<Verse>\n"
-    "        Range of verses in a book chapter\n"
-    "    <Book>:<Chapter>:<Verse>-<Chapter>:<Verse>\n"
-    "        Range of chapters and verses in a book\n"
-    "\n"
-    "    /<Search>\n"
-    "        All verses that match a pattern\n"
-    "    <Book>/<Search>\n"
-    "        All verses in a book that match a pattern\n"
-    "    <Book>:<Chapter>/<Search>\n"
-    "        All verses in a chapter of a book that match a pattern\n";
+"\n"
+"Flags:\n"
+"  -A num  number of verses of context after matching verses\n"
+"  -B num  number of verses of context before matching verses\n"
+"  -C      show matching verses in context of the chapter\n"
+"  -b      Blank line between verses.\n"
+"  -d      Disable italic highlighting.\n"
+"  -h      show help\n"
+"  -l      list books\n"
+"  -v      show version number\n"
+"  -w      maximum line width (default is 80)\n"
+"\n"
+"Reference:\n"
+"    <Book>\n"
+"        Individual book\n"
+"    <Book>:<Chapter>\n"
+"        Individual chapter of a book\n"
+"    <Book>:<Chapter>:<Verse>[,<Verse>]...\n"
+"        Individual verse(s) of a specific chapter of a book\n"
+"    <Book>:<Chapter>-<Chapter>\n"
+"        Range of chapters in a book\n"
+"    <Book>:<Chapter>:<Verse>-<Verse>\n"
+"        Range of verses in a book chapter\n"
+"    <Book>:<Chapter>:<Verse>-<Chapter>:<Verse>\n"
+"        Range of chapters and verses in a book\n"
+"\n"
+"    /<Search>\n"
+"        All verses that match a pattern\n"
+"    <Book>/<Search>\n"
+"        All verses in a book that match a pattern\n"
+"    <Book>:<Chapter>/<Search>\n"
+"        All verses in a chapter of a book that match a pattern\n";
 
 int
 main(int argc, char *argv[])
@@ -557,7 +564,7 @@ main(int argc, char *argv[])
     bool list_books = false;
 
     opterr = 0;
-    for (int opt; (opt = getopt(argc, argv, "A:B:ClWh")) != -1; ) {
+    for (int opt; (opt = getopt(argc, argv, "A:B:Cbdhlvw")) != -1; ) {
         char *endptr;
         switch (opt) {
         case 'A':
@@ -577,15 +584,29 @@ main(int argc, char *argv[])
         case 'C':
             config.context_chapter = true;
             break;
+        case 'b':
+            printf("Blank line between versus.  Not implemented\n");
+            return 0;
+        case 'd':
+            printf("Diable itialic highlighting.  Not implemented\n");
+            return 0;
         case 'l':
             list_books = true;
             break;
         case 'h':
             printf("%s", usage);
             return 0;
+        case 'v':
+            printf("%s\n", kjv_version);
+            return 0;
+        case 'w':
+            printf("Maximum line width.  Not implemented\n");
+            return 0;
+            /* config.maximum_line_length = 60; */ 
+            /* break; */
         case '?':
             fprintf(stderr, "kjv: invalid flag -%c\n\n%s", optopt, usage);
-            return 1;
+            break;
         }
     }
 

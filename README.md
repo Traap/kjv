@@ -12,8 +12,12 @@ Read the Word of God from your terminal
       -A num  number of verses of context after matching verses
       -B num  number of verses of context before matching verses
       -C      show matching verses in context of the chapter
-      -l      list books
+      -b      Blank line between verses.
+      -d      Disable italic highlighting.
       -h      show help
+      -l      list books
+      -v      show version number
+      -w      maximum line width (default is 80)
 
     Reference:
         <Book>
