@@ -2,12 +2,12 @@
 /* 
  * kjv: Read the Word of God from your terminal
  * 
-* License: Public domain 
+ * License: Public domain 
  **/
 /* ---------------------------------------------------------------------- }}} */
 /* {{{ major, minor, patch, build */
 
-static const char* kjv_version = "1.1.1.51";
+static const char* kjv_version = "1.1.1.52";
 
 /* ---------------------------------------------------------------------- }}} */
 /* {{{ include files */
@@ -320,45 +320,139 @@ str_join(size_t n, char *strs[])
 }
 
 /* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_ref_search function */
+
+static bool 
+kjv_ref_search(const kjv_ref *ref, const kjv_verse *verse)
+{
+    return
+      ( 
+          (
+              ref->book == 0 || 
+              ref->book == verse->book
+          ) &&
+          (
+              ref->chapter == 0 || 
+              verse->chapter == ref->chapter
+          ) &&
+          regexec(&ref->search, verse->text, 0, NULL, 0) == 0
+      );
+}
+
+/* ----------------------------------------------------------------------- }}}*/
+/* {{{ kjv_ref_exact function */
+
+static bool 
+kjv_ref_exact(const kjv_ref *ref, const kjv_verse *verse)
+{
+    return
+      ( 
+          ref->book == verse->book &&
+          (
+              ref->chapter == 0 || 
+              ref->chapter == verse->chapter
+          ) &&
+          (
+              ref->verse == 0 || 
+              ref->verse == verse->verse
+          )
+      );
+}
+
+/* ----------------------------------------------------------------------- }}}*/
+/* {{{ kjv_ref_exact_set function */
+
+static bool 
+kjv_ref_exact_set(const kjv_ref *ref, const kjv_verse *verse)
+{
+    return 
+      (
+          ref->book == verse->book &&
+          (
+              ref->chapter == 0 || 
+              verse->chapter == ref->chapter
+          ) &&
+          intset_contains(ref->verse_set, verse->verse)
+      );
+}
+
+/* ----------------------------------------------------------------------- }}}*/
+/* {{{ kjv_ref_range function */
+
+static bool 
+kjv_ref_range(const kjv_ref *ref, const kjv_verse *verse)
+{
+    return 
+        (
+            ref->book == verse->book &&
+            (
+                (
+                    ref->chapter_end == 0 && 
+                    ref->chapter == verse->chapter
+                ) ||
+                (
+                    verse->chapter >= ref->chapter && 
+                    verse->chapter <= ref->chapter_end
+                )
+            ) &&
+            (
+                ref->verse == 0 || 
+                verse->verse >= ref->verse
+            ) &&
+            (
+                ref->verse_end == 0 || 
+                verse->verse <= ref->verse_end
+            )
+        );
+}
+
+/* ----------------------------------------------------------------------- }}}*/
+/* {{{ kjv_ref_range_ext function */
+
+static bool 
+kjv_ref_range_ext(const kjv_ref *ref, const kjv_verse *verse)
+{
+    return 
+        (
+            ref->book == verse->book &&
+            (
+                (
+                    verse->chapter == ref->chapter && 
+                    verse->verse >= ref->verse && 
+                    ref->chapter != ref->chapter_end
+                ) ||
+                (
+                    verse->chapter > ref->chapter && 
+                    verse->chapter < ref->chapter_end
+                ) ||
+                (
+                    verse->chapter == ref->chapter_end && 
+                    verse->verse <= ref->verse_end && 
+                    ref->chapter != ref->chapter_end
+                ) ||
+                ( 
+                    ref->chapter == ref->chapter_end && 
+                    verse->chapter == ref->chapter && 
+                    verse->verse >= ref->verse && 
+                    verse->verse <= ref->verse_end
+                )
+            )
+        );
+  }
+
+/* ----------------------------------------------------------------------- }}}*/
 /* {{{ kjv_verse_matches function */
 
 static bool
 kjv_verse_matches(const kjv_ref *ref, const kjv_verse *verse)
 {
     switch (ref->type) {
-        case KJV_REF_SEARCH:
-            return (ref->book == 0 || ref->book == verse->book) &&
-                (ref->chapter == 0 || verse->chapter == ref->chapter) &&
-                regexec(&ref->search, verse->text, 0, NULL, 0) == 0;
-
-        case KJV_REF_EXACT:
-            return ref->book == verse->book &&
-                (ref->chapter == 0 || ref->chapter == verse->chapter) &&
-                (ref->verse == 0 || ref->verse == verse->verse);
-
-        case KJV_REF_EXACT_SET:
-            return ref->book == verse->book &&
-                (ref->chapter == 0 || verse->chapter == ref->chapter) &&
-                intset_contains(ref->verse_set, verse->verse);
-
-        case KJV_REF_RANGE:
-            return ref->book == verse->book &&
-                ((ref->chapter_end == 0 && ref->chapter == verse->chapter) ||
-                    (verse->chapter >= ref->chapter && verse->chapter <= ref->chapter_end)) &&
-                (ref->verse == 0 || verse->verse >= ref->verse) &&
-                (ref->verse_end == 0 || verse->verse <= ref->verse_end);
-
-        case KJV_REF_RANGE_EXT:
-            return ref->book == verse->book &&
-                (
-                    (verse->chapter == ref->chapter && verse->verse >= ref->verse && ref->chapter != ref->chapter_end) ||
-                    (verse->chapter > ref->chapter && verse->chapter < ref->chapter_end) ||
-                    (verse->chapter == ref->chapter_end && verse->verse <= ref->verse_end && ref->chapter != ref->chapter_end) ||
-                    (ref->chapter == ref->chapter_end && verse->chapter == ref->chapter && verse->verse >= ref->verse && verse->verse <= ref->verse_end)
-                );
-
-        default:
-            return false;
+        case KJV_REF_SEARCH:    return kjv_ref_search(ref, verse);
+        case KJV_REF_EXACT:     return kjv_ref_exact(ref, verse);
+        case KJV_REF_EXACT_SET: return kjv_ref_exact_set(ref, verse); 
+        case KJV_REF_RANGE:     return kjv_ref_range(ref, verse);
+        case KJV_REF_RANGE_EXT: return kjv_ref_range_ext(ref, verse);
+        default:                return false;
     }
 }
 
