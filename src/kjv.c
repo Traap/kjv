@@ -1,8 +1,16 @@
-/*
-kjv: Read the Word of God from your terminal
+/* {{{ King James Version */ 
+/* 
+ * kjv: Read the Word of God from your terminal
+ * 
+* License: Public domain 
+ **/
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ major, minor, patch, build */
 
-License: Public domain
-*/
+static const char* kjv_version = "1.1.1.51";
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ include files */
 
 #include <assert.h>
 #include <stdio.h>
@@ -22,8 +30,8 @@ License: Public domain
 #include "data.h"
 #include "intset.h"
 
-/* major, minor, patch, build */
-static const char* kjv_version = "1.1.1.50";
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_config struct */
 
 typedef struct {
     int maximum_line_length;
@@ -31,13 +39,21 @@ typedef struct {
     int context_before;
     int context_after;
     bool context_chapter;
+    bool supress_italic;
+    bool blank_after_verse;
 } kjv_config;
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ KJV_REF definitions */
 
 #define KJV_REF_SEARCH 1
 #define KJV_REF_EXACT 2
 #define KJV_REF_EXACT_SET 3
 #define KJV_REF_RANGE 4
 #define KJV_REF_RANGE_EXT 5
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_ref struct */
 
 typedef struct kjv_ref {
     int type;
@@ -51,11 +67,17 @@ typedef struct kjv_ref {
     regex_t search;
 } kjv_ref;
 
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_newref function */
+
 static kjv_ref *
 kjv_newref()
 {
     return calloc(1, sizeof(kjv_ref));
 }
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_freeref function */
 
 static void
 kjv_freeref(kjv_ref *ref)
@@ -67,6 +89,8 @@ kjv_freeref(kjv_ref *ref)
     }
 }
 
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_boolequal function */
 
 static bool
 kjv_bookequal(const char *a, const char *b, bool short_match)
@@ -87,13 +111,21 @@ kjv_bookequal(const char *a, const char *b, bool short_match)
     }
 }
 
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_book_matches function */
+
 static bool
 kjv_book_matches(const kjv_book *book, const char *s)
 {
-    return kjv_bookequal(book->name, s, false) ||
+    return 
+        kjv_bookequal(book->name, s, false) ||
         kjv_bookequal(book->abbr, s, false) ||
         kjv_bookequal(book->name, s, true);
 }
+
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_book_fromname function */
 
 static int
 kjv_book_fromname(const char *s)
@@ -106,6 +138,9 @@ kjv_book_fromname(const char *s)
     }
     return 0;
 }
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_scanbook function */
 
 static int
 kjv_scanbook(const char *s, int *n)
@@ -126,6 +161,9 @@ kjv_scanbook(const char *s, int *n)
     *n = i;
     return mode >= 1;
 }
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_parseref function */
 
 static int
 kjv_parseref(kjv_ref *ref, const char *ref_str)
@@ -167,7 +205,8 @@ kjv_parseref(kjv_ref *ref, const char *ref_str)
         return 1;
     }
 
-    if (sscanf(ref_str, ":%u%n", &ref->chapter, &n) == 1 || sscanf(ref_str, "%u%n", &ref->chapter, &n) == 1) {
+    if (sscanf(ref_str, ":%u%n", &ref->chapter, &n) == 1 || 
+        sscanf(ref_str, "%u%n",  &ref->chapter, &n) == 1) {
         // 2, 3, 3a, 4, 5, 6, 9
         ref_str = &ref_str[n];
     } else if (ref_str[0] == '/') {
@@ -256,6 +295,9 @@ search:
     return 0;
 }
 
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ str_join function */
+
 static char *
 str_join(size_t n, char *strs[])
 {
@@ -276,6 +318,9 @@ str_join(size_t n, char *strs[])
     }
     return str;
 }
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_verse_matches function */
 
 static bool
 kjv_verse_matches(const kjv_ref *ref, const kjv_verse *verse)
@@ -317,8 +362,14 @@ kjv_verse_matches(const kjv_ref *ref, const kjv_verse *verse)
     }
 }
 
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ KJV_DIRECTION definitions */
+
 #define KJV_DIRECTION_BEFORE -1
 #define KJV_DIRECTION_AFTER 1
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_chapeter_bounds function */
 
 static int
 kjv_chapter_bounds(int i, int direction, int maximum_steps)
@@ -342,6 +393,9 @@ kjv_chapter_bounds(int i, int direction, int maximum_steps)
     return i;
 }
 
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_chapeter_bounds function */
+
 static int
 kjv_next_match(const kjv_ref *ref, int i)
 {
@@ -354,16 +408,25 @@ kjv_next_match(const kjv_ref *ref, int i)
     return -1;
 }
 
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_range struct */
+
 typedef struct {
     int start;
     int end;
 } kjv_range;
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_next_data struct */
 
 typedef struct {
     int current;
     int next_match;
     kjv_range matches[2];
 } kjv_next_data;
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_next_addrange function */
 
 static void
 kjv_next_addrange(kjv_next_data *next, kjv_range range) {
@@ -375,6 +438,9 @@ kjv_next_addrange(kjv_next_data *next, kjv_range range) {
         next->matches[1] = range;
     }
 }
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_next_verse function */
 
 static int
 kjv_next_verse(const kjv_ref *ref, const kjv_config *config, kjv_next_data *next)
@@ -413,14 +479,25 @@ kjv_next_verse(const kjv_ref *ref, const kjv_config *config, kjv_next_data *next
     return next->current++;
 }
 
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ ESC definitions */
+
 #define ESC_BOLD "\033[1m"
 #define ESC_UNDERLINE "\033[4m"
 #define ESC_RESET "\033[m"
 
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_output_verse function */
+
 static void
 kjv_output_verse(const kjv_verse *verse, FILE *f, const kjv_config *config)
 {
-    fprintf(f, ESC_BOLD "%d:%d" ESC_RESET "\t", verse->chapter, verse->verse);
+    if (config->supress_italic) {
+        fprintf(f, "%d:%d ", verse->chapter, verse->verse);
+    } else {
+        fprintf(f, ESC_BOLD "%d:%d" ESC_RESET "\t", verse->chapter, verse->verse);
+    }
+
     char verse_text[1024];
     strcpy(verse_text, verse->text);
     size_t characters_printed = 0;
@@ -439,8 +516,16 @@ kjv_output_verse(const kjv_verse *verse, FILE *f, const kjv_config *config)
         characters_printed += word_length;
         word = strtok(NULL, " ");
     }
-    fprintf(f, "\n");
+
+    if (config->blank_after_verse) {
+      fprintf(f, "\n\n");
+    } else {
+      fprintf(f, "\n");
+    }
 }
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_output function */
 
 static bool
 kjv_output(const kjv_ref *ref, FILE *f, const kjv_config *config)
@@ -468,6 +553,9 @@ kjv_output(const kjv_ref *ref, FILE *f, const kjv_config *config)
     }
     return last_printed != NULL;
 }
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_render function */
 
 static int
 kjv_render(const kjv_ref *ref, const kjv_config *config)
@@ -515,6 +603,9 @@ kjv_render(const kjv_ref *ref, const kjv_config *config)
     return 0;
 }
 
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ usage string */
+
 const char *
 usage = "usage: kjv [flags] [reference...]\n"
 "\n"
@@ -550,6 +641,9 @@ usage = "usage: kjv [flags] [reference...]\n"
 "    <Book>:<Chapter>/<Search>\n"
 "        All verses in a chapter of a book that match a pattern\n";
 
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ main function */
+
 int
 main(int argc, char *argv[])
 {
@@ -559,6 +653,8 @@ main(int argc, char *argv[])
         .context_before = 0,
         .context_after = 0,
         .context_chapter = false,
+        .supress_italic = false,
+        .blank_after_verse = false,
     };
 
     bool list_books = false;
@@ -585,11 +681,11 @@ main(int argc, char *argv[])
             config.context_chapter = true;
             break;
         case 'b':
-            printf("Blank line between versus.  Not implemented\n");
-            return 0;
+            config.blank_after_verse = true;
+            break;
         case 'd':
-            printf("Diable itialic highlighting.  Not implemented\n");
-            return 0;
+            config.supress_italic = true;
+            break;
         case 'l':
             list_books = true;
             break;
@@ -600,10 +696,8 @@ main(int argc, char *argv[])
             printf("%s\n", kjv_version);
             return 0;
         case 'w':
-            printf("Maximum line width.  Not implemented\n");
-            return 0;
-            /* config.maximum_line_length = 60; */ 
-            /* break; */
+            config.maximum_line_length = 30;
+            break;
         case '?':
             fprintf(stderr, "kjv: invalid flag -%c\n\n%s", optopt, usage);
             break;
@@ -654,3 +748,5 @@ main(int argc, char *argv[])
 
     return 0;
 }
+
+/* ---------------------------------------------------------------------- }}} */
