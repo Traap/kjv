@@ -7,7 +7,7 @@
 /* ---------------------------------------------------------------------- }}} */
 /* {{{ major, minor, patch, build */
 
-static const char* kjv_version = "1.1.1.53";
+static const char* kjv_version = "1.1.1.60";
 
 /* ---------------------------------------------------------------------- }}} */
 /* {{{ include files */
@@ -35,12 +35,12 @@ static const char* kjv_version = "1.1.1.53";
 
 typedef struct {
     int maximum_line_length;
-
     int context_before;
     int context_after;
     bool context_chapter;
     bool supress_italic;
     bool blank_after_verse;
+    bool list_books; 
 } kjv_config;
 
 /* ---------------------------------------------------------------------- }}} */
@@ -593,7 +593,10 @@ kjv_output_verse(const kjv_verse *verse, FILE *f, const kjv_config *config)
     char *word = strtok(verse_text, " ");
     while (word != NULL) {
         size_t word_length = strlen(word);
-        if (characters_printed + word_length + (characters_printed > 0 ? 1 : 0) > config->maximum_line_length - 8 - 2) {
+        if (characters_printed + word_length + 
+           (characters_printed > 0 ? 1 : 0) > 
+            config->maximum_line_length - 8 - 2) {
+
             fprintf(f, "\n\t");
             characters_printed = 0;
         }
@@ -731,83 +734,108 @@ usage = "usage: kjv [flags] [reference...]\n"
 "        All verses in a chapter of a book that match a pattern\n";
 
 /* ---------------------------------------------------------------------- }}} */
-/* {{{ main function */
+/* {{{ kjv_init_config function */
 
-int
-main(int argc, char *argv[])
+static void
+kjv_init_config(kjv_config *config)
 {
-    kjv_config config = {
-        .maximum_line_length = 80,
+    config->maximum_line_length = 80;
+    config->context_before = 0;
+    config->context_after = 0;
+    config->context_chapter = false;
+    config->supress_italic = false;
+    config->blank_after_verse = false;
+    config->list_books = false;
+}
 
-        .context_before = 0,
-        .context_after = 0,
-        .context_chapter = false,
-        .supress_italic = false,
-        .blank_after_verse = false,
-    };
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_process_command_line function */
 
-    bool list_books = false;
+static int
+kjv_process_command_line(int argc, char *argv[], kjv_config *config)
+{
+ 
+    int retval = 0;
 
-    opterr = 0;
-    for (int opt; (opt = getopt(argc, argv, "A:B:Cbdhlvw")) != -1; ) {
+    for (int opt; (opt = getopt(argc, argv, "A:B:Cbdhlvw:")) != -1; ) {
         char *endptr;
         switch (opt) {
         case 'A':
-            config.context_after = strtol(optarg, &endptr, 10);
+            config->context_after = strtol(optarg, &endptr, 10);
             if (endptr[0] != '\0') {
                 fprintf(stderr, "kjv: invalid flag value for -A\n\n%s", usage);
-                return 1;
+                retval = 1;
             }
             break;
         case 'B':
-            config.context_before = strtol(optarg, &endptr, 10);
+            config->context_before = strtol(optarg, &endptr, 10);
             if (endptr[0] != '\0') {
                 fprintf(stderr, "kjv: invalid flag value for -B\n\n%s", usage);
-                return 1;
+                retval = 1;
             }
             break;
-        case 'C':
-            config.context_chapter = true;
-            break;
-        case 'b':
-            config.blank_after_verse = true;
-            break;
-        case 'd':
-            config.supress_italic = true;
-            break;
-        case 'l':
-            list_books = true;
-            break;
-        case 'h':
-            printf("%s", usage);
-            return 0;
-        case 'v':
-            printf("%s\n", kjv_version);
-            return 0;
+        case 'C': config->context_chapter = true;          break;
+        case 'b': config->blank_after_verse = true;        break;
+        case 'd': config->supress_italic = true;           break; 
+        case 'l': config->list_books = true;               break;
+        case 'h': printf("%s", usage); retval = 2;         break;
+        case 'v': printf("%s\n", kjv_version); retval = 2; break;
         case 'w':
-            config.maximum_line_length = 30;
+            config->maximum_line_length = strtol(optarg, &endptr, 10);
+            if (endptr[0] != '\0') {
+                fprintf(stderr, "kjv: invalid flag value for -w\n\n%s", usage);
+                retval = 1;
+            }
             break;
         case '?':
             fprintf(stderr, "kjv: invalid flag -%c\n\n%s", optopt, usage);
+            retval = 1;
             break;
         }
     }
 
-    if (list_books) {
+    if (retval == 1) { exit(1); }
+    if (retval == 2) { exit(0); }
+    return retval;
+}
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_list_books funcdtion */
+
+static void 
+kjv_list_books(const kjv_config *config)
+{
+    if (config->list_books) {
         for (int i = 0; i < kjv_books_length; i++) {
             kjv_book *book = &kjv_books[i];
             printf("%s (%s)\n", book->name, book->abbr);
         }
-        return 0;
+        exit(0);
     }
+}
 
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_line_length function */
+
+static void  
+kjv_line_length(kjv_config *config)
+{
     struct winsize ttysize;
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ttysize) == 0 && ttysize.ws_col > 0) {
-        config.maximum_line_length = ttysize.ws_col;
+    if (
+        ioctl(STDOUT_FILENO, TIOCGWINSZ, &ttysize) == 0 && 
+        ttysize.ws_col > 0 &&
+        config->maximum_line_length == 80
+       ) {
+        config->maximum_line_length = ttysize.ws_col;
     }
+}
 
-    signal(SIGPIPE, SIG_IGN);
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_fetch_verse function */
 
+static void 
+kjv_fetch_verse(int argc, char *argv[], kjv_config *config)
+{
     if (argc == optind) {
         using_history();
         while (true) {
@@ -820,7 +848,7 @@ main(int argc, char *argv[])
             int success = kjv_parseref(ref, input);
             free(input);
             if (success == 0) {
-                kjv_render(ref, &config);
+                kjv_render(ref, config);
             }
             kjv_freeref(ref);
         }
@@ -830,10 +858,31 @@ main(int argc, char *argv[])
         int success = kjv_parseref(ref, ref_str);
         free(ref_str);
         if (success == 0) {
-            kjv_render(ref, &config);
+            kjv_render(ref, config);
         }
         kjv_freeref(ref);
     }
+}
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ main function */
+
+int
+main(int argc, char *argv[])
+{
+    kjv_config config;
+
+    kjv_init_config(&config);
+
+    kjv_process_command_line(argc, argv, &config);
+
+    kjv_list_books(&config);
+
+    kjv_line_length(&config);
+
+    signal(SIGPIPE, SIG_IGN);
+
+    kjv_fetch_verse(argc, argv, &config);
 
     return 0;
 }
