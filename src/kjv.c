@@ -7,7 +7,7 @@
 /* ---------------------------------------------------------------------- }}} */
 /* {{{ major, minor, patch, build */
 
-static const char* kjv_version = "1.1.1.60";
+static const char* kjv_version = "1.1.1.62";
 
 /* ---------------------------------------------------------------------- }}} */
 /* {{{ include files */
@@ -483,7 +483,7 @@ kjv_chapter_bounds(int i, int direction, int maximum_steps)
 }
 
 /* ---------------------------------------------------------------------- }}} */
-/* {{{ kjv_chapeter_bounds function */
+/* {{{ kjv_next_match function */
 
 static int
 kjv_next_match(const kjv_ref *ref, int i)
@@ -584,7 +584,7 @@ kjv_output_verse(const kjv_verse *verse, FILE *f, const kjv_config *config)
     if (config->supress_italic) {
         fprintf(f, "%d:%d ", verse->chapter, verse->verse);
     } else {
-        fprintf(f, ESC_BOLD "%d:%d" ESC_RESET "\t", verse->chapter, verse->verse);
+        fprintf(f, ESC_BOLD "%d:%d" ESC_RESET "\t",verse->chapter, verse->verse);
     }
 
     char verse_text[1024];
@@ -597,7 +597,12 @@ kjv_output_verse(const kjv_verse *verse, FILE *f, const kjv_config *config)
            (characters_printed > 0 ? 1 : 0) > 
             config->maximum_line_length - 8 - 2) {
 
-            fprintf(f, "\n\t");
+            if (config->supress_italic) {
+              fprintf(f, "\n");
+            } else {
+              fprintf(f, "\n\t"); 
+            }
+
             characters_printed = 0;
         }
         if (characters_printed > 0) {
@@ -638,7 +643,11 @@ kjv_output(const kjv_ref *ref, FILE *f, const kjv_config *config)
             if (last_printed != NULL) {
                 fprintf(f, "\n");
             }
-            fprintf(f, ESC_UNDERLINE "%s" ESC_RESET "\n\n", kjv_books[verse->book - 1].name);
+            if (config->supress_italic) {
+                fprintf(f, "%s\n\n", kjv_books[verse->book - 1].name);
+            } else {
+                fprintf(f, ESC_UNDERLINE "%s" ESC_RESET "\n\n", kjv_books[verse->book - 1].name);
+            }
         }
         kjv_output_verse(verse, f, config);
         last_printed = verse;
