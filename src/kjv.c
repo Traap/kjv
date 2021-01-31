@@ -7,7 +7,7 @@
 /* ---------------------------------------------------------------------- }}} */
 /* {{{ major, minor, patch, build */
 
-static const char* kjv_version = "1.1.1.74";
+static const char* kjv_version = "1.1.1.97";
 
 /* ---------------------------------------------------------------------- }}} */
 /* {{{ include files */
@@ -29,6 +29,11 @@ static const char* kjv_version = "1.1.1.74";
 
 #include "data.h"
 #include "intset.h"
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ characters_printed variable */
+
+static size_t characters_printed = 0;
 
 /* ---------------------------------------------------------------------- }}} */
 /* {{{ kjv_config struct */
@@ -122,7 +127,6 @@ kjv_book_matches(const kjv_book *book, const char *s)
         kjv_bookequal(book->abbr, s, false) ||
         kjv_bookequal(book->name, s, true);
 }
-
 
 /* ---------------------------------------------------------------------- }}} */
 /* {{{ kjv_book_fromname function */
@@ -467,16 +471,24 @@ kjv_chapter_bounds(int i, int direction, int maximum_steps)
 
     int steps = 0;
     for ( ; 0 <= i && i < kjv_verses_length; i += direction) {
+
         if (maximum_steps != -1 && steps >= maximum_steps) {
             break;
         }
-        if ((direction == -1 && i == 0) || (direction == 1 && i + 1 == kjv_verses_length)) {
+
+        if ((direction == -1 && i == 0) || 
+            (direction ==  1 && i + 1 == kjv_verses_length)) {
             break;
         }
-        const kjv_verse *current = &kjv_verses[i], *next = &kjv_verses[i + direction];
-        if (current->book != next->book || current->chapter != next->chapter) {
+
+        const kjv_verse *current = &kjv_verses[i], 
+                        *next    = &kjv_verses[i + direction];
+
+        if (current->book != next->book || 
+            current->chapter != next->chapter) {
             break;
         }
+
         steps++;
     }
     return i;
@@ -589,29 +601,62 @@ kjv_next_verse(const kjv_ref *ref, const kjv_config *config, kjv_next_data *next
 #define ESC_RESET "\033[m"
 
 /* ---------------------------------------------------------------------- }}} */
-/* {{{ kjv_output_book */
+/* {{{ kjv_current_line_length function */
+
+static int kjv_current_line_length(const kjv_verse *verse, const kjv_config *config)
+{
+    int length = config->maximum_line_length - 8 - 2;
+    if (config->supress_highlights) {
+      length = config->maximum_line_length;  
+    }
+    return length; 
+}
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_maximum_line_length function */
+
+static void
+kjv_maximum_line_length(kjv_config *config)
+{
+    struct winsize ttysize;
+    if (
+        ioctl(STDOUT_FILENO, TIOCGWINSZ, &ttysize) == 0 &&
+        ttysize.ws_col > 0 &&
+        config->maximum_line_length == 80
+       ) {
+        config->maximum_line_length = ttysize.ws_col;
+    }
+}
+
+/* ---------------------------------------------------------------------- }}} */
+/* {{{ kjv_output_book function */
 
 static void
 kjv_output_book(const kjv_verse *verse, FILE *f, const kjv_config *config, 
                 const kjv_verse *last_printed) 
 {
+    size_t book_length = strlen(kjv_books[verse->book - 1].name + 1);
+
     if (last_printed == NULL || 
         verse->book != last_printed->book) {
 
         if (config->supress_highlights) {
             fprintf(f, "%s ", kjv_books[verse->book - 1].name);
+            characters_printed = book_length;
         } else {
             fprintf(f, ESC_UNDERLINE "%s" ESC_RESET "\n\n", kjv_books[verse->book - 1].name);
+            characters_printed = 0;
         }
     } else {
         if (config->supress_highlights) {
             fprintf(f, "%s ", kjv_books[verse->book - 1].name);
+            characters_printed = book_length;
         } 
     }
 }
 
 /* ---------------------------------------------------------------------- }}} */
-/* {{{ kjv_output_chap_n_verse */
+/* {{{ kjv_output_chap_n_verse function */
 
 static void
 kjv_output_chap_n_verse(const kjv_verse *verse, FILE *f, const kjv_config *config) 
@@ -619,12 +664,13 @@ kjv_output_chap_n_verse(const kjv_verse *verse, FILE *f, const kjv_config *confi
     char format[] = ESC_BOLD "%d:%d" ESC_RESET "\t";
     if (config->supress_highlights) {
         strcpy(format, "%d:%d ");
+        characters_printed += strlen(format);
     }
     fprintf(f, format, verse->chapter, verse->verse);
 }
 
 /* ---------------------------------------------------------------------- }}} */
-/* {{{ kjv_output_verse_begin */
+/* {{{ kjv_output_verse_begin function */
 
 static void
 kjv_output_verse_begin(FILE *f, const kjv_config *config) 
@@ -634,10 +680,11 @@ kjv_output_verse_begin(FILE *f, const kjv_config *config)
     } else {
       fprintf(f, "\n\t");
     }
+    characters_printed = 0;
 }
 
 /* ---------------------------------------------------------------------- }}} */
-/* {{{ kjv_output_verse_end */
+/* {{{ kjv_output_verse_end function */
 
 static void
 kjv_output_verse_end(FILE *f, const kjv_config *config) 
@@ -647,6 +694,7 @@ kjv_output_verse_end(FILE *f, const kjv_config *config)
     } else {
       fprintf(f, "\n");
     }
+    characters_printed = 0;
 }
 
 /* ---------------------------------------------------------------------- }}} */
@@ -658,28 +706,25 @@ kjv_output_verse(const kjv_verse *verse, FILE *f, const kjv_config *config)
 
     char verse_text[1024];
     strcpy(verse_text, verse->text);
-    size_t characters_printed = 0;
-    char *word = strtok(verse_text, " ");
+    char *word = strtok(verse_text, " "); 
 
     while (word != NULL) {
+
         size_t word_length = strlen(word);
-        if (characters_printed + word_length +
-           (characters_printed > 0 ? 1 : 0) >
-            config->maximum_line_length - 8 - 2) {
+        size_t line_length = kjv_current_line_length(verse, config);
+        size_t next_length = word_length +
+                             characters_printed + 
+                            (characters_printed > 0 ? 1 : 0);
 
+        if (next_length > line_length) {  
             kjv_output_verse_begin(f, config);
-            characters_printed = 0;
-        }
-        if (characters_printed > 0) {
-
-            fprintf(f, " ");
-            characters_printed++;
         }
 
-        fprintf(f, "%s", word);
-        characters_printed += word_length;
+        fprintf(f, "%s ", word);
+        characters_printed += word_length + 1;
         word = strtok(NULL, " ");
     }
+
     kjv_output_verse_end(f, config);
 }
 
@@ -878,22 +923,6 @@ kjv_list_books(const kjv_config *config)
 }
 
 /* ---------------------------------------------------------------------- }}} */
-/* {{{ kjv_line_length function */
-
-static void
-kjv_line_length(kjv_config *config)
-{
-    struct winsize ttysize;
-    if (
-        ioctl(STDOUT_FILENO, TIOCGWINSZ, &ttysize) == 0 &&
-        ttysize.ws_col > 0 &&
-        config->maximum_line_length == 80
-       ) {
-        config->maximum_line_length = ttysize.ws_col;
-    }
-}
-
-/* ---------------------------------------------------------------------- }}} */
 /* {{{ kjv_fetch_verse function */
 
 static void
@@ -941,7 +970,7 @@ main(int argc, char *argv[])
 
     kjv_list_books(&config);
 
-    kjv_line_length(&config);
+    kjv_maximum_line_length(&config);
 
     signal(SIGPIPE, SIG_IGN);
 
